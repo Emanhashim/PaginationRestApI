@@ -1,9 +1,9 @@
 package com.bazra.usermanagement.controller;
 
 import java.math.BigDecimal;
-import java.util.List;
+import java.util.*;
 
-import com.bazra.usermanagement.TransactionService;
+//import com.bazra.usermanagement.TransactionService;
 import com.bazra.usermanagement.model.Transaction;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -14,6 +14,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,6 +32,7 @@ import com.bazra.usermanagement.response.BalanceResponse;
 import com.bazra.usermanagement.response.ResponseError;
 import com.bazra.usermanagement.response.TransactionResponse;
 
+import javax.persistence.criteria.Order;
 
 
 @RestController
@@ -48,8 +50,8 @@ import com.bazra.usermanagement.response.TransactionResponse;
 })
 public class UsersTransaction {
 
-    @Autowired
-    TransactionService transactionService;
+//    @Autowired
+//    TransactionService transactionService;
     @Autowired
     private AccountService accountService;
     @Autowired
@@ -58,6 +60,8 @@ public class UsersTransaction {
     AccountRepository accountRepository;
     @Autowired
     TransactionRepository data;
+
+
 
     public UserInfo getCurrentUser(@AuthenticationPrincipal UserInfo user) {
         return user;
@@ -101,7 +105,7 @@ public class UsersTransaction {
           if (account == null) {
               return ResponseEntity.badRequest().body(new ResponseError("Invalid account"));
           }
-          
+
            return ResponseEntity.ok(new TransactionResponse(transactionRepository.findByfromAccountNumberEquals(authentication.getName())));
 //        return accountService.findall(transactionRequest.getAccountNumber());
     }
@@ -118,188 +122,93 @@ public class UsersTransaction {
         return ResponseEntity.ok(new BalanceResponse(balance,"Your current balance equals "+balance,account.getUsername()));
     }
 
+//this for transaction by pagging
 
-
-    @GetMapping("/Transaction/{pageNo}/{pageSize}")
-    public List<Transaction> getPaginated(@PathVariable int pageNo, @PathVariable int pageSize){
-        return transactionService.findByPagination(pageNo, pageSize);
-    }
-
-
-
-
-
-//    this to check by pagging
-
-@GetMapping("/page-One")
-public List<Transaction> getPageOne()
-{
-
-    // First page with 5 items
-    Pageable paging = (Pageable) PageRequest.of(
-            0, 5, Sort.by("transactionId").ascending());
-    Page<Transaction> page = data.findAll(paging);
-
-    // Retrieve the items
-    return page.getContent();
+private Sort.Direction getSortDirection(String direction){
+        if(direction.equals("asc")){
+            return Sort.Direction.ASC;
+        }else if(direction.equals("desc")){
+            return Sort.Direction.DESC;
+        }return Sort.Direction.ASC;
 }
 
-    @GetMapping("/page-Two")
-    public List<Transaction> getPageTwo()
-    {
+@GetMapping("/Sorted")
+    public ResponseEntity<List<Transaction> >getAllTransaction(@RequestParam(defaultValue = "transactionId,desc") String[] sort){
+    try {
+        List<Sort.Order> orders = new ArrayList<Sort.Order>();
 
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                6, 11, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
+        if (sort[0].contains(",")) {
+            // will sort more than 2 fields
+            // sortOrder="field, direction"
+            for (String sortOrder : sort) {
+                String[] _sort = sortOrder.split(",");
+                orders.add(new Sort.Order(getSortDirection(_sort[1]), _sort[0]));
+            }
+        } else {
+            // sort=[field, direction]
+            orders.add(new Sort.Order(getSortDirection(sort[1]), sort[0]));
+        }
+        List<Transaction> transactions = transactionRepository.findAll(Sort.by(orders));
+        if (transactions.isEmpty()){
+            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        }return new ResponseEntity<>(transactions, HttpStatus.OK);
+    }catch (Exception e) {
+        return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    @GetMapping("/page-Three")
-    public List<Transaction> getPageThree()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                11, 16, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
     }
-    @GetMapping("/page-Four")
-    public List<Transaction> getPageFour()
-    {
 
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                16, 21, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
+    @GetMapping("/TransactionPaged")
+    public ResponseEntity<Map<String, Object>> getAllTransactionPage(
+            @RequestParam(required = false) String accountNumber,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "transactionId,desc") String[] sort){
+        try{
+            List<Sort.Order> orders = new ArrayList<Sort.Order>();
 
-        // Retrieve the items
-        return page.getContent();
+            if (sort[0].contains(",")) {
+                // will sort more than 2 fields
+                // sortOrder="field, direction"
+                for (String sortOrder : sort) {
+                    String[] _sort = sortOrder.split(",");
+                    orders.add(new Sort.Order(getSortDirection(_sort[1]), _sort[0]));
+                }
+            } else {
+                // sort=[field, direction]
+                orders.add(new Sort.Order(getSortDirection(sort[1]), sort[0]));
+            }
+
+            List<Transaction>  transactions = new ArrayList<>();
+            Pageable pagingSort = PageRequest.of(page, size, Sort.by(orders));
+
+            Page<Transaction> pageTuts;
+            if(accountNumber == null)
+                pageTuts = transactionRepository.findAll(pagingSort);
+
+            else {
+                pageTuts = transactionRepository.findByAccountNumberContaining(accountNumber, pagingSort);
+            }
+            transactions = pageTuts.getContent();
+            Map<String, Object> response = new HashMap<>();
+            response.put("transactions", transactions);
+            response.put("currentPage", pageTuts.getNumber());
+            response.put("totalTransaction", pageTuts.getTotalElements());
+            response.put("totalPages", pageTuts.getTotalPages());   return new ResponseEntity<>(response, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
-    @GetMapping("/page-Five")
-    public List<Transaction> getPageFive()
-    {
 
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                21, 26, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Six")
-    public List<Transaction> getPageSix()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(27, 31, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Seven")
-    public List<Transaction> getPageSeven()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                31, 37, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Eight")
-    public List<Transaction> getPageEight()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                37, 41, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Nine")
-    public List<Transaction> getPageNine()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                41, 46, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Ten")
-    public List<Transaction> getPageTen()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                47, 51, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Eleven")
-    public List<Transaction> getPageEleven()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                51, 56, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Twelve")
-    public List<Transaction> getPageTwelve()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                57, 61, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Thirteen")
-    public List<Transaction> getPageThirteen()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                62, 66, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
-    @GetMapping("/page-Fourteen")
-    public List<Transaction> getPageFourteen()
-    {
-
-        // Second page with another 5 items
-        Pageable paging = (Pageable) PageRequest.of(
-                66, 71, Sort.by("transactionId").ascending());
-        Page<Transaction> page = data.findAll(paging);
-
-        // Retrieve the items
-        return page.getContent();
-    }
+    @GetMapping("/TransactionPaged/{id}")
+        public ResponseEntity<Transaction> getTransactionById(@PathVariable("transactionId")long transactionId){
+        Optional<Transaction> transaction = transactionRepository.findById(transactionId);
+        if(transaction.isPresent()){
+            return  new ResponseEntity<>(transaction.get(), HttpStatus.OK);
+        }else {
+            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+        }
+        }
 
 
 

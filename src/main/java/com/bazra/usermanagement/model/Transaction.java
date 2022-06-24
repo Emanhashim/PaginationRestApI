@@ -22,6 +22,8 @@ public class Transaction {
 
     @Id
     @GeneratedValue
+
+//  private String title;
     private Long transactionId;
     private Long userID;
     private String accountNumber;
@@ -36,8 +38,15 @@ public class Transaction {
 //    private Transaction() {
 //        
 //    }
-    
-   
+
+
+//    public String getTitle() {
+//        return title;
+//    }
+//
+//    public void setTitle(String title) {
+//        this.title = title;
+//    }
 
     public Long getUserID() {
 		return userID;
@@ -105,5 +114,18 @@ public class Transaction {
         this.transactionAmount=amount;
         this.transactionDateTime=timestamp;
         
+    }
+
+    @Override
+    public String toString() {
+        return "Transaction{" +
+                "transactionId=" + transactionId +
+                ", userID=" + userID +
+                ", accountNumber='" + accountNumber + '\'' +
+                ", fromAccountNumber='" + fromAccountNumber + '\'' +
+                ", transactionAmount=" + transactionAmount +
+                ", transactionDateTime=" + transactionDateTime +
+                ", transaction_type='" + transaction_type + '\'' +
+                '}';
     }
 }
